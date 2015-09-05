@@ -4,9 +4,13 @@
 # Requirement
 Java 6 or higher
 
-# Usage
+# How to use
 
-1. First, you must prepare your [Connection String](https://azure.microsoft.com/en-us/documentation/articles/storage-configure-connection-string/) for your storage account.
+1. First, you must prepare your [Connection String](https://azure.microsoft.com/en-us/documentation/articles/storage-configure-connection-string/) for your storage account. The format is 
+
+	```bash
+	DefaultEndpointsProtocol=[http|https];AccountName=myAccountName;AccountKey=myAccountKey
+	```
 
 2. Download from release
 
