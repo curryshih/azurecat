@@ -12,7 +12,7 @@ Java 6 or higher
 	DefaultEndpointsProtocol=[http|https];AccountName=myAccountName;AccountKey=myAccountKey
 	```
 
-2. Download from release
+2. Download from [release](https://github.com/tenmax/azurecat/releases).
 
 3. Run the command,
 
