@@ -10,9 +10,10 @@ import java.net.URISyntaxException;
 import java.security.InvalidKeyException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.zip.GZIPInputStream;
 
 public class Main {
-    private static final String VERSION = "0.1.0";
+    private static final String VERSION = "0.1.1";
     private static final int READ_SIZE = 64 * 1024;
 
     private CommandLine commandLine = null;
@@ -27,6 +28,18 @@ public class Main {
         options.addOption( "c", true, "The connection string" );
         options.addOption( "h", false, "The help information" );
         options.addOption( "v", false, "The version" );
+        options.addOption( "z", false, "The gzip format" );
+        options.addOption(Option.builder()
+            .longOpt("prefix")
+            .desc("cat all the blobs with the prefix")
+            .build());
+        options.addOption(Option.builder()
+                .longOpt("postfix")
+                .argName("string")
+                .hasArg(true)
+                .desc("keep only the blob which has the path with the specified postfix. The postfix only be used while prefix is used.")
+                .build());
+
 
         try {
             // parse the command line arguments
@@ -101,13 +114,22 @@ public class Main {
         }
     }
 
-    public Main(String[] args) throws IOException, URISyntaxException, StorageException, InvalidKeyException {
+    public Main(String[] args) {
         parseArgs(args);
 
         readAccountsFromFile();
         readAccountsFromArgs();
 
-        URI blobUri = URI.create(commandLine.getArgs()[0]);
+        boolean prefixMode = commandLine.hasOption("prefix");
+        String postfix = commandLine.hasOption("postfix") ?
+                commandLine.getOptionValue("postfix") :
+                null;
+
+        URI blobUri = null;
+
+
+        blobUri = URI.create(commandLine.getArgs()[0]);
+
         String accountName = blobUri.getHost().split("\\.")[0];
         CloudStorageAccount account = null;
         for (CloudStorageAccount tmpAccount : accounts) {
@@ -116,30 +138,136 @@ public class Main {
                 break;
             }
         }
-
         if (account == null) {
             System.err.println("Connection String for " + accountName + " is not defined");
             System.exit(-1);
             return;
         }
 
-        CloudBlockBlob blob = new CloudBlockBlob(blobUri, account.getCredentials());
-        if (!blob.exists()) {
-            System.err.println("The specified blob does not exist");
-            System.exit(-1);
+        if (prefixMode) {
+            catPrefix(account, blobUri, postfix);
+        } else {
+            catOne(account, blobUri);
+        }
+    }
+
+    private void catOne(CloudStorageAccount account, URI blobUri) {
+
+        try {
+            String container = blobUri.getPath().split("/")[1];
+            String path = blobUri.getPath().substring(2 + container.length());
+
+            CloudBlobClient blobClient = account.createCloudBlobClient();
+            CloudBlobContainer blobContainer = blobClient.getContainerReference(container);
+            Iterable<ListBlobItem> blobs = blobContainer.listBlobs(path);
+
+            boolean found = false;
+            for (ListBlobItem blobItem : blobs) {
+                if (blobItem instanceof CloudBlob) {
+                    CloudBlob blob = (CloudBlob) blobItem;
+                    if (blob.getUri().equals(blobUri)) {
+                        printBlob(blob);
+                        return;
+                    }
+                }
+            }
+
+            System.err.println("Can't find blob at " + blobUri);
+            return;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void catPrefix(
+            CloudStorageAccount account,
+            URI blobUri,
+            String postfix) {
+
+        try {
+            String container = blobUri.getPath().split("/")[1];
+            String path = blobUri.getPath().substring(2 + container.length());
+
+            CloudBlobClient blobClient = account.createCloudBlobClient();
+            CloudBlobContainer blobContainer = blobClient.getContainerReference(container);
+            Iterable<ListBlobItem> blobs = blobContainer.listBlobs(path);
+            for (ListBlobItem blobItem : blobs) {
+
+                if (blobItem instanceof CloudBlob) {
+                    CloudBlob blob = (CloudBlob) blobItem;
+
+                    if (postfix != null &&
+                            !blob.getUri().toString().endsWith(postfix)) {
+                        continue;
+                    }
+
+                    try {
+                        printBlob(blob);
+                    } catch(Exception e) {
+                        System.err.println("Can't print the blob at " + blob.getUri());
+                        e.printStackTrace();
+                        System.exit(-1);
+                    }
+                } else if (blobItem instanceof CloudBlobDirectory) {
+                    catDirectory((CloudBlobDirectory) blobItem, postfix);
+                }
+
+                if (System.out.checkError()) {
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void catDirectory(CloudBlobDirectory directory,
+                              String postfix)
+            throws URISyntaxException, StorageException, IOException {
+        Iterable<ListBlobItem> blobs = directory.listBlobs();
+        for (ListBlobItem blobItem: blobs) {
+            if (blobItem instanceof CloudBlob) {
+                CloudBlob blob = (CloudBlob) blobItem;
+
+                if(postfix != null &&
+                        !blob.getUri().toString().endsWith(postfix))
+                {
+                    continue;
+                }
+
+                printBlob(blob);
+            } else if (blobItem instanceof CloudBlobDirectory) {
+                catDirectory((CloudBlobDirectory) blobItem, postfix);
+            }
+        }
+    }
+
+
+
+    private void printBlob(CloudBlob blob) throws StorageException, IOException {
+        blob.setStreamMinimumReadSizeInBytes(READ_SIZE);
+        InputStream in = blob.openInputStream();
+
+
+        if(commandLine.hasOption("z")) {
+            in = new GZIPInputStream(in);
         }
 
-        blob.setStreamMinimumReadSizeInBytes(READ_SIZE);
-        BlobInputStream in = blob.openInputStream();
+        try
+        {
+            byte[] buffer = new byte[READ_SIZE];
+            int read;
+            while ((read = in.read(buffer)) > 0) {
+                System.out.write(buffer, 0, read);
+                System.out.flush();
 
-        byte[] buffer = new byte[READ_SIZE];
-        int read;
-        while((read = in.read(buffer)) > 0) {
-            System.out.write(buffer,0, read);
-            System.out.flush();
-
-            if(System.out.checkError()) {
-                break;
+                if (System.out.checkError()) {
+                    break;
+                }
+            }
+        } finally {
+            if (in != null) {
+                in.close();
             }
         }
     }

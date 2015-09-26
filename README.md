@@ -4,7 +4,7 @@
 # Requirement
 Java 6 or higher
 
-# How to use
+# Getting Start
 
 1. First, you must prepare your [Connection String](https://azure.microsoft.com/en-us/documentation/articles/storage-configure-connection-string/) for your storage account. The format is 
 
@@ -20,12 +20,58 @@ Java 6 or higher
 	azurecat -c <connection-string> http://<account-name>.blob.core.windows.net/<container-name>/<blob-path>
 	```
 	
-	or just issue
+# Configuration File
+
+You can put your connection strings at `~/.azure/storagekeys` line by line
+
+Here is the exmaple.
+
+```
+DefaultEndpointsProtocol=https;AccountName= myAccountName1;AccountKey=myAccountKey1
+DefaultEndpointsProtocol=https;AccountName= myAccountName2;AccountKey=myAccountKey2
+```
+
+then, you can print the resource directly without connection string specified.
+
+```bash
+azurecat https://<account-name>.blob.core.windows.net/<container-name>/<blob-path>
+```
 	
+# Usage
+
+1. Print a resource
+
 	```bash
-	azurecat http://<account-name>.blob.core.windows.net/<container-name>/<blob-path>
+	azurecat https://<account-name>.blob.core.windows.net/<container-name>/<blob-path>
 	```
 	
-	while the connection strings are stored in `~/.azure/storagekeys` line by line.
+2. Concatenate and print the resources with prefix
 
+	```bash
+	azurecat --prefix https://<account-name>.blob.core.windows.net/<container-name>/<blob-prefix>
+	```
+3. Concatenate and print the resources with prefix and the resource should match the postfix
 
+	```bash
+	azurecat --prefix --postfix csv https://<account-name>.blob.core.windows.net/<container-name>/<blob-prefix>
+	```
+
+4. Decode the resource by gzip compression format.
+
+	```bash
+	azurecat -z --prefix --postfix gz https://<account-name>.blob.core.windows.net/<container-name>/<blob-prefix>
+	```
+	
+The full help for `azurecat`
+
+```
+usage: azurecat [-c <connection-string>] <blob-uri>
+ -c <arg>                The connection string
+ -h                      The help information
+    --postfix <string>   keep only the blob which has the path with the
+                         specified postfix. The postfix only be used while
+                         prefix is used.
+    --prefix             cat all the blobs with the prefix
+ -v                      The version
+ -z                      The gzip format
+```
