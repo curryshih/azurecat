@@ -7,13 +7,13 @@ import org.apache.commons.cli.*;
 import java.io.*;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.security.InvalidKeyException;
+import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.zip.GZIPInputStream;
 
 public class Main {
-    private static final String VERSION = "0.1.1";
+    private static final String VERSION = "0.1.2";
     private static final int READ_SIZE = 64 * 1024;
 
     private CommandLine commandLine = null;
@@ -128,7 +128,14 @@ public class Main {
         URI blobUri = null;
 
 
-        blobUri = URI.create(commandLine.getArgs()[0]);
+        String path = commandLine.getArgs()[0];
+        try {
+            path = URLDecoder.decode(path, "utf-8");
+        } catch (UnsupportedEncodingException e) {
+            // don't use the decoded path. Use the original one
+        }
+
+        blobUri = URI.create(path);
 
         String accountName = blobUri.getHost().split("\\.")[0];
         CloudStorageAccount account = null;
